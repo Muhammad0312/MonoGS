@@ -1,0 +1,2 @@
+The pipeline is working, ATE is too much for monocular
+Check if it is due to orbslam or a configuration issue
