@@ -43,6 +43,7 @@ class FrontEnd(mp.Process):
         self.orbslamTimeStampsFile = None
         self.orbslamImgFiles = []
         self.orbslamTimeStamps = []
+        self.orbslamDepthFiles = []
         self.orbslamImageScale = None
         self.viewpoint_num = 0
 
@@ -134,19 +135,23 @@ class FrontEnd(mp.Process):
         self.reset = False
 
     def tracking(self, cur_frame_idx, viewpoint):
-        currentTimeStamp = self.orbslamTimeStamps[cur_frame_idx]
-        img = cv2.imread(self.orbslamImgFiles[cur_frame_idx], cv2.IMREAD_UNCHANGED)
+        img = cv2.imread(viewpoint.color_path, cv2.IMREAD_UNCHANGED)
+        imgD = cv2.imread(viewpoint.depth_path, cv2.IMREAD_UNCHANGED)
+        currentTimeStamp = self.dataset.timestamps[cur_frame_idx]
 
         if self.orbslamImageScale != 1.0:
             width = img.cols * self.orbslamImageScale
             height = img.rows * self.orbslamImageScale
             img = cv2.resize(img, (width, height))
 
-        success = self.orbslam.process_image_mono(img, currentTimeStamp)
+        success = self.orbslam.process_image_rgbd(img, imgD, currentTimeStamp)
         if self.orbslam.get_tracking_state() != 2:
             viewpoint.update_RT(viewpoint.R_gt, viewpoint.T_gt)
             return
         elif self.orbslam.get_tracking_state() == 2:
+            if cur_frame_idx == 0:
+                self.viewpoint_num += 1
+                return
             trajectory = self.orbslam.get_full_trajectory()
             current_pose = torch.from_numpy(trajectory[-1])
             first_frame_rot = self.cameras[0].R_gt
@@ -154,11 +159,11 @@ class FrontEnd(mp.Process):
             T = torch.eye(4)
             T[:3, :3] = first_frame_rot
             T[:3, 3] = first_frame_trans
-            current_pose = T @ current_pose
+            current_pose = torch.inverse(current_pose) @ T
             viewpoint.update_RT(current_pose[:3, :3], current_pose[:3, 3])
-            self.viewpoint_num += 1
+            # viewpoint.update_RT(viewpoint.R_gt, viewpoint.T_gt)
         else:
-            '''This condition needs checking what to do if orbslam.get_tracking_state() != 2'''
+            '''This condition needs checking, what to do if orbslam.get_tracking_state() != 2'''
             prev = self.cameras[cur_frame_idx - self.use_every_n_frames]
             viewpoint.update_RT(prev.R, prev.T)
 
@@ -381,10 +386,10 @@ class FrontEnd(mp.Process):
                 # '''TODO: Add only those frames which were tracked successfully by ORBSLAM'''
                 # self.cameras[cur_frame_idx] = viewpoint
 
-                self.initialized = self.initialized or (
-                    len(self.current_window) == self.window_size
-                )
-
+                # self.initialized = self.initialized or (
+                #     len(self.current_window) == self.window_size
+                # )
+                self.initialized = self.orbslam.get_tracking_state() == 2
 
                 current_window_dict = {}
                 current_window_dict[self.current_window[0]] = self.current_window[1:]

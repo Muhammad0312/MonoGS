@@ -18,7 +18,7 @@ from utils.dataset import load_dataset
 from utils.eval_utils import eval_ate, eval_rendering, save_gaussians
 from utils.logging_utils import Log
 from utils.multiprocessing_utils import FakeQueue
-from utils.slam_backend import BackEnd
+from utils.vigs_backend import BackEnd
 from utils.vigs_frontend import FrontEnd
 
 import orbslam3
@@ -58,9 +58,9 @@ class SLAM:
         self.dataset = load_dataset(
             model_params, model_params.source_path, config=config
         )
-        self.orbslam = orbslam3.system("submodules/ORBSLAM3_PYTHON/extern/ORB_SLAM3/Vocabulary/ORBvoc.txt",
-                                    "submodules/ORBSLAM3_PYTHON/extern/ORB_SLAM3/Examples/Monocular/TUM1.yaml",
-                                    orbslam3.Sensor.MONOCULAR, False)
+        self.orbslam = orbslam3.system(self.config["Orbslam"]["vocab_file"],
+                                    self.config["Orbslam"]["settings_file"],
+                                    orbslam3.Sensor.RGBD, False)
         
 
         self.gaussians.training_setup(opt_params)
@@ -89,8 +89,8 @@ class SLAM:
         self.frontend.set_hyperparams()
 
         self.frontend.orbslam = self.orbslam
-        self.frontend.orbslamTimeStampsFile = os.path.join(self.config["Dataset"]["dataset_path"], 'rgb.txt')
-        self.load_timestamps()
+        # self.frontend.orbslamTimeStampsFile = os.path.join(self.config["Dataset"]["dataset_path"], 'rgb.txt')
+        # self.load_timestamps()
         self.frontend.orbslamImageScale = self.orbslam.get_image_scale()
 
         self.backend.gaussians = self.gaussians
@@ -210,17 +210,13 @@ class SLAM:
     def run(self):
         pass
     
-    def load_timestamps(self):
-        with open(self.frontend.orbslamTimeStampsFile, 'r') as f:
-            numLine = 0
-            for line in f:
-                if numLine < 3:
-                    numLine += 1
-                    continue
-                l = line.split()
-                self.frontend.orbslamTimeStamps.append(double(l[0]))
-                self.frontend.orbslamImgFiles.append(os.path.join(self.config["Dataset"]["dataset_path"], l[1]))
-
+    # def load_timestamps(self):
+    #     with open(self.config["Orbslam"]["associations_file"], 'r') as f:
+    #         for line in f:
+    #             l = line.split()
+    #             self.frontend.orbslamTimeStamps.append(double(l[0]))
+    #             self.frontend.orbslamImgFiles.append(os.path.join(self.config["Dataset"]["dataset_path"], l[1]))
+    #             self.frontend.orbslamDepthFiles.append(os.path.join(self.config["Dataset"]["dataset_path"], l[3]))
 
 if __name__ == "__main__":
     # Set up command line argument parser

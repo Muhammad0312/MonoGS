@@ -1,2 +1,27 @@
 The pipeline is working, ATE is too much for monocular
 Check if it is due to orbslam or a configuration issue
+
+    The method to get trajectory from orbslam cannot be used for TUM monocular case 
+    Found this in a comment in the System.cc file
+    probably that is the issue of large ATE Error
+
+    But how do they show the position of camera in gui
+    Is is updated after LBA and BA 
+    Investigate
+
+Should I run orbslam3 on replica dataset
+Have to create config files for it
+What else?
+
+Can use TUM as RGBD for orbslam3 and Monogs
+Both have the configuration and orbslam3 can be used to get trajectory
+
+
+Something is wrong with the camera trajectory
+It goes wild!!!!!!!!!!!!!
+is it being optimized somewhere check it
+is it some shitty transformation
+
+Fixed the transformation, double check it
+The frames for orbslam and MonoGs donot correspond,
+Modify the dataset to get the color and depth paths with timestamps.

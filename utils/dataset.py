@@ -100,7 +100,7 @@ class TUMParser:
             if t1 - t0 > 1.0 / frame_rate:
                 indicies += [i]
 
-        self.color_paths, self.poses, self.depth_paths, self.frames = [], [], [], []
+        self.color_paths, self.poses, self.depth_paths, self.frames, self.timestamps = [], [], [], [], []
 
         for ix in indicies:
             (i, j, k) = associations[ix]
@@ -112,6 +112,7 @@ class TUMParser:
             T = trimesh.transformations.quaternion_matrix(np.roll(quat, 1))
             T[:3, 3] = trans
             self.poses += [np.linalg.inv(T)]
+            self.timestamps += [tstamp_pose[k]]
 
             frame = {
                 "file_path": str(os.path.join(datapath, image_data[i, 1])),
@@ -258,6 +259,7 @@ class MonocularDataset(BaseDataset):
 
         image = np.array(Image.open(color_path))
         depth = None
+        depth_path = None
 
         if self.disorted:
             image = cv2.remap(image, self.map1x, self.map1y, cv2.INTER_LINEAR)
@@ -273,7 +275,7 @@ class MonocularDataset(BaseDataset):
             .to(device=self.device, dtype=self.dtype)
         )
         pose = torch.from_numpy(pose).to(device=self.device)
-        return image, depth, pose
+        return image, depth, pose, color_path, depth_path
 
 
 class StereoDataset(BaseDataset):
@@ -400,6 +402,7 @@ class TUMDataset(MonocularDataset):
         self.color_paths = parser.color_paths
         self.depth_paths = parser.depth_paths
         self.poses = parser.poses
+        self.timestamps = parser.timestamps
 
 
 class ReplicaDataset(MonocularDataset):
