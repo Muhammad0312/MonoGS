@@ -1,10 +1,10 @@
 Results:
-  save_results: True
+  save_results: False
   save_dir: "delete_this"
-  save_trj: True
-  save_trj_kf_intv: 10
-  use_gui: True
-  eval_rendering: True
+  save_trj: False
+  save_trj_kf_intv: 1000
+  use_gui: False
+  eval_rendering: False
   use_wandb: False
 
 Dataset:
@@ -45,7 +45,7 @@ Training:
 
   lr:
     cam_rot_delta: 0.003
-    cam_trans_delta: 0.001
+    cam_trans_delta: 0.0001
 
 opt_params:
   iterations: 30000

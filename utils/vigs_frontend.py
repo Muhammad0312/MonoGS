@@ -53,6 +53,8 @@ class FrontEnd(mp.Process):
         self.device = "cuda:0"
         self.pause = False
 
+        self.translation_error = []
+
     def set_hyperparams(self):
         self.save_dir = self.config["Results"]["save_dir"]
         self.save_results = self.config["Results"]["save_results"]
@@ -118,7 +120,7 @@ class FrontEnd(mp.Process):
         return initial_depth[0].numpy()
 
     def initialize(self, cur_frame_idx, viewpoint):
-        self.initialized = self.orbslam.get_tracking_state() == 2
+        self.initialized = not self.monocular
         self.kf_indices = []
         self.iteration_count = 0
         self.occ_aware_visibility = {}
@@ -159,26 +161,39 @@ class FrontEnd(mp.Process):
             success = self.orbslam.process_image_mono(img, currentTimeStamp)
 
         if self.orbslam.get_tracking_state() != 2:
-            viewpoint.update_RT(viewpoint.R_gt, viewpoint.T_gt)
+            # viewpoint.update_RT(viewpoint.R_gt, viewpoint.T_gt)
             return
         elif self.orbslam.get_tracking_state() == 2:
             if cur_frame_idx == 0:
                 self.viewpoint_num += 1
                 return
+            self.cameras[cur_frame_idx] = viewpoint
             trajectory = self.orbslam.get_full_trajectory()
-            current_pose = torch.from_numpy(trajectory[-1])
             first_frame_rot = self.cameras[0].R_gt
             first_frame_trans = self.cameras[0].T_gt
             T = torch.eye(4)
             T[:3, :3] = first_frame_rot
             T[:3, 3] = first_frame_trans
+            # traj_start = time.time()
+            current_pose = torch.from_numpy(trajectory[-1])
             current_pose = torch.inverse(current_pose) @ T
             viewpoint.update_RT(current_pose[:3, :3], current_pose[:3, 3])
+            
+            # for (traj, cam) in zip(trajectory, list(self.cameras.values())[1:]):
+            #     current_pose = torch.from_numpy(traj)
+            #     current_pose = torch.inverse(current_pose) @ T
+            #     cam.update_RT(current_pose[:3, :3], current_pose[:3, 3])
+            
+            # traj_end = time.time()
+            # Log("Took ", traj_end - traj_start, " seconds to update viewpoints.")
             # viewpoint.update_RT(viewpoint.R_gt, viewpoint.T_gt)
+                
         else:
             '''This condition needs checking, what to do if orbslam.get_tracking_state() != 2'''
             prev = self.cameras[cur_frame_idx - self.use_every_n_frames]
             viewpoint.update_RT(prev.R, prev.T)
+
+        self.translation_error.append(torch.norm(viewpoint.T - viewpoint.T_gt).detach().cpu().numpy())
 
         render_pkg = render(
                     viewpoint, self.gaussians, self.pipeline_params, self.background
@@ -346,6 +361,17 @@ class FrontEnd(mp.Process):
 
             if self.frontend_queue.empty():
                 tic.record()
+                # if cur_frame_idx > 20:
+                #     fig = plt.figure()
+                #     ax = fig.add_subplot(111)
+                #     ax.set_title("Translation Error")
+                #     ax.plot(self.translation_error[:5])
+                #     ax.set_ylim([0, 0.1])
+                #     # ax.set_xlim([0, len(self.translation_error)])
+                #     fig.show()
+                #     fig.waitforbuttonpress()
+                #     break
+
                 if cur_frame_idx >= len(self.dataset):
                     if self.save_results:
                         eval_ate(
@@ -378,8 +404,8 @@ class FrontEnd(mp.Process):
                 )
                 viewpoint.compute_grad_mask(self.config)
 
-                '''TODO: Add only those frames which were tracked successfully by ORBSLAM'''
-                self.cameras[cur_frame_idx] = viewpoint
+                # '''TODO: Add only those frames which were tracked successfully by ORBSLAM'''
+                # self.cameras[cur_frame_idx] = viewpoint
 
                 if cur_frame_idx == 0:
                     self.cameras[cur_frame_idx] = viewpoint
@@ -393,19 +419,19 @@ class FrontEnd(mp.Process):
 
                 # Tracking
                 render_pkg = self.tracking(cur_frame_idx, viewpoint)
-                viewpoint_check = self.cameras[cur_frame_idx]
+                # viewpoint_check = self.cameras[cur_frame_idx]
 
                 if self.orbslam.get_tracking_state() != 2:
                     cur_frame_idx += 1
                     continue
 
-                # '''TODO: Add only those frames which were tracked successfully by ORBSLAM'''
+                '''TODO: Add only those frames which were tracked successfully by ORBSLAM'''
                 # self.cameras[cur_frame_idx] = viewpoint
 
-                # self.initialized = self.initialized or (
-                #     len(self.current_window) == self.window_size
-                # )
-                self.initialized = self.orbslam.get_tracking_state() == 2
+                self.initialized = self.initialized or (
+                    len(self.current_window) == self.window_size
+                )
+                # self.initialized = self.orbslam.get_tracking_state() == 2
 
                 current_window_dict = {}
                 current_window_dict[self.current_window[0]] = self.current_window[1:]

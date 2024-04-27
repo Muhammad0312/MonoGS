@@ -13,7 +13,7 @@ from utils.logging_utils import Log
 from utils.multiprocessing_utils import clone_obj
 from utils.pose_utils import update_pose
 from utils.slam_utils import get_loss_tracking, get_median_depth
-
+import cv2
 import matplotlib.pyplot as plt
 
 
@@ -39,6 +39,14 @@ class FrontEnd(mp.Process):
         self.requested_init = False
         self.requested_keyframe = 0
         self.use_every_n_frames = 1
+
+        self.orbslam = None
+        self.orbslamTimeStampsFile = None
+        self.orbslamImgFiles = []
+        self.orbslamTimeStamps = []
+        self.orbslamDepthFiles = []
+        self.orbslamImageScale = None
+        self.viewpoint_num = 0
 
         self.gaussians = None
         self.cameras = dict()
@@ -130,74 +138,78 @@ class FrontEnd(mp.Process):
         self.reset = False
 
     def tracking(self, cur_frame_idx, viewpoint):
-        prev = self.cameras[cur_frame_idx - self.use_every_n_frames]
-        viewpoint.update_RT(prev.R, prev.T)
+        if self.config["Orbslam"]["sensor_type"] == "rgbd":
+            img = cv2.imread(viewpoint.color_path, cv2.IMREAD_UNCHANGED)
+            imgD = cv2.imread(viewpoint.depth_path, cv2.IMREAD_UNCHANGED)
+            currentTimeStamp = self.dataset.timestamps[cur_frame_idx]
 
-        opt_params = []
-        opt_params.append(
-            {
-                "params": [viewpoint.cam_rot_delta],
-                "lr": self.config["Training"]["lr"]["cam_rot_delta"],
-                "name": "rot_{}".format(viewpoint.uid),
-            }
-        )
-        opt_params.append(
-            {
-                "params": [viewpoint.cam_trans_delta],
-                "lr": self.config["Training"]["lr"]["cam_trans_delta"],
-                "name": "trans_{}".format(viewpoint.uid),
-            }
-        )
-        opt_params.append(
-            {
-                "params": [viewpoint.exposure_a],
-                "lr": 0.01,
-                "name": "exposure_a_{}".format(viewpoint.uid),
-            }
-        )
-        opt_params.append(
-            {
-                "params": [viewpoint.exposure_b],
-                "lr": 0.01,
-                "name": "exposure_b_{}".format(viewpoint.uid),
-            }
-        )
+            if self.orbslamImageScale != 1.0:
+                width = img.cols * self.orbslamImageScale
+                height = img.rows * self.orbslamImageScale
+                img = cv2.resize(img, (width, height))
 
-        pose_optimizer = torch.optim.Adam(opt_params)
-        for tracking_itr in range(self.tracking_itr_num):
-            render_pkg = render(
-                viewpoint, self.gaussians, self.pipeline_params, self.background
-            )
-            image, depth, opacity = (
-                render_pkg["render"],
-                render_pkg["depth"],
-                render_pkg["opacity"],
-            )
-            pose_optimizer.zero_grad()
-            loss_tracking = get_loss_tracking(
-                self.config, image, depth, opacity, viewpoint
-            )
-            loss_tracking.backward()
+            success = self.orbslam.process_image_rgbd(img, imgD, currentTimeStamp)
+        elif self.config["Orbslam"]["sensor_type"] == "mono":
+            img = cv2.imread(viewpoint.color_path, cv2.IMREAD_UNCHANGED)
+            currentTimeStamp = self.dataset.timestamps[cur_frame_idx]
 
-            with torch.no_grad():
-                pose_optimizer.step()
-                converged = update_pose(viewpoint,converged_threshold=1e-8)
+            if self.orbslamImageScale != 1.0:
+                width = img.cols * self.orbslamImageScale
+                height = img.rows * self.orbslamImageScale
+                img = cv2.resize(img, (width, height))
 
-            if tracking_itr % 10 == 0:
-                self.q_main2vis.put(
-                    gui_utils.GaussianPacket(
-                        current_frame=viewpoint,
-                        gtcolor=viewpoint.original_image,
-                        gtdepth=viewpoint.depth
-                        if not self.monocular
-                        else np.zeros((viewpoint.image_height, viewpoint.image_width)),
-                    )
-                )
-            if converged:
-                break
+            success = self.orbslam.process_image_mono(img, currentTimeStamp)
+
+        if self.orbslam.get_tracking_state() != 2:
+            # viewpoint.update_RT(viewpoint.R_gt, viewpoint.T_gt)
+            return
+        elif self.orbslam.get_tracking_state() == 2:
+            if cur_frame_idx == 0:
+                self.viewpoint_num += 1
+                return
+            self.cameras[cur_frame_idx] = viewpoint
+            trajectory = self.orbslam.get_full_trajectory()
+            first_frame_rot = self.cameras[0].R_gt
+            first_frame_trans = self.cameras[0].T_gt
+            T = torch.eye(4)
+            T[:3, :3] = first_frame_rot
+            T[:3, 3] = first_frame_trans
+            # traj_start = time.time()
+            current_pose = torch.from_numpy(trajectory[-1])
+            current_pose = torch.inverse(current_pose) @ T
+            viewpoint.update_RT(current_pose[:3, :3], current_pose[:3, 3])
+            
+            # for (traj, cam) in zip(trajectory, list(self.cameras.values())[1:]):
+            #     current_pose = torch.from_numpy(traj)
+            #     current_pose = torch.inverse(current_pose) @ T
+            #     cam.update_RT(current_pose[:3, :3], current_pose[:3, 3])
+            
+            # traj_end = time.time()
+            # Log("Took ", traj_end - traj_start, " seconds to update viewpoints.")
+            # viewpoint.update_RT(viewpoint.R_gt, viewpoint.T_gt)
+            return
+        else:
+            '''This condition needs checking, what to do if orbslam.get_tracking_state() != 2'''
+            prev = self.cameras[cur_frame_idx - self.use_every_n_frames]
+            viewpoint.update_RT(prev.R, prev.T)
 
         self.translation_error.append(torch.norm(viewpoint.T - viewpoint.T_gt).detach().cpu().numpy())
-        self.median_depth = get_median_depth(depth, opacity)
+        render_pkg = None
+
+        # render_pkg = render(
+        #             viewpoint, self.gaussians, self.pipeline_params, self.background
+        #         )
+            
+        # image, depth, opacity = (
+        #         render_pkg["render"],
+        #         render_pkg["depth"],
+        #         render_pkg["opacity"],
+        #     )
+        
+        # plt.imshow(image.permute(1, 2, 0).detach().cpu().numpy())
+        # plt.show()
+        
+        # self.median_depth = get_median_depth(depth, opacity)
         return render_pkg
 
     def is_keyframe(
@@ -310,8 +322,8 @@ class FrontEnd(mp.Process):
         keyframes = data[3]
         self.occ_aware_visibility = occ_aware_visibility
 
-        for kf_id, kf_R, kf_T in keyframes:
-            self.cameras[kf_id].update_RT(kf_R.clone(), kf_T.clone())
+        # for kf_id, kf_R, kf_T in keyframes:
+        #     self.cameras[kf_id].update_RT(kf_R.clone(), kf_T.clone())
 
     def cleanup(self, cur_frame_idx):
         self.cameras[cur_frame_idx].clean()
@@ -320,6 +332,7 @@ class FrontEnd(mp.Process):
 
     def run(self):
         cur_frame_idx = 0
+        self.viewpoint_num = 0
         projection_matrix = getProjectionMatrix2(
             znear=0.01,
             zfar=100.0,
@@ -349,18 +362,18 @@ class FrontEnd(mp.Process):
 
             if self.frontend_queue.empty():
                 tic.record()
-                if cur_frame_idx > 10:
-                    fig = plt.figure()
-                    ax = fig.add_subplot(111)
-                    ax.set_title("Translation Error")
-                    ax.plot(self.translation_error[:5])
-                    ax.set_ylim([0, 0.1])
-                    # ax.set_xlim([0, len(self.translation_error)])
-                    fig.show()
-                    fig.waitforbuttonpress()
-                    break
+                # if cur_frame_idx > 20:
+                #     fig = plt.figure()
+                #     ax = fig.add_subplot(111)
+                #     ax.set_title("Translation Error")
+                #     ax.plot(self.translation_error[:5])
+                #     ax.set_ylim([0, 0.1])
+                #     # ax.set_xlim([0, len(self.translation_error)])
+                #     fig.show()
+                #     fig.waitforbuttonpress()
+                #     break
 
-                if cur_frame_idx >= len(self.dataset):   
+                if cur_frame_idx >= len(self.dataset):
                     if self.save_results:
                         eval_ate(
                             self.cameras,
@@ -390,22 +403,31 @@ class FrontEnd(mp.Process):
                 viewpoint = Camera.init_from_dataset(
                     self.dataset, cur_frame_idx, projection_matrix
                 )
-                viewpoint.compute_grad_mask(self.config)
+                # viewpoint.compute_grad_mask(self.config)
+                if cur_frame_idx == 0:
+                    self.cameras[cur_frame_idx] = viewpoint
+                
 
-                self.cameras[cur_frame_idx] = viewpoint
+                # Tracking
+                render_pkg = self.tracking(cur_frame_idx, viewpoint)
+
+                if self.orbslam.get_tracking_state() != 2:
+                    cur_frame_idx += 1
+                    continue
+
+                num_keyframes = self.orbslam.get_num_keyframes()
 
                 if self.reset:
                     self.initialize(cur_frame_idx, viewpoint)
                     self.current_window.append(cur_frame_idx)
+                    self.tracking(cur_frame_idx, viewpoint)
                     cur_frame_idx += 1
                     continue
 
                 self.initialized = self.initialized or (
                     len(self.current_window) == self.window_size
                 )
-
-                # Tracking
-                render_pkg = self.tracking(cur_frame_idx, viewpoint)
+                # self.initialized = self.orbslam.get_tracking_state() == 2
 
                 current_window_dict = {}
                 current_window_dict[self.current_window[0]] = self.current_window[1:]
@@ -415,6 +437,10 @@ class FrontEnd(mp.Process):
                     gui_utils.GaussianPacket(
                         gaussians=clone_obj(self.gaussians),
                         current_frame=viewpoint,
+                        gtcolor=viewpoint.original_image,
+                        gtdepth=viewpoint.depth
+                        if not self.monocular
+                        else np.zeros((viewpoint.image_height, viewpoint.image_width)),
                         keyframes=keyframes,
                         kf_window=current_window_dict,
                     )

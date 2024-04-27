@@ -15,5 +15,6 @@ wandb
 
 result*
 
-submodules/simple-knn/build
-submodules/simple-knn/simple_knn.egg-info
+submodules/simple-knn/
+
+delete_this/
