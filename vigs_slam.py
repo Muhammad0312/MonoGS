@@ -58,9 +58,14 @@ class SLAM:
         self.dataset = load_dataset(
             model_params, model_params.source_path, config=config
         )
-        self.orbslam = orbslam3.system(self.config["Orbslam"]["vocab_file"],
+        if self.config["Orbslam"]["sensor_type"] == "mono":
+            self.orbslam = orbslam3.system(self.config["Orbslam"]["vocab_file"],
                                     self.config["Orbslam"]["settings_file"],
-                                    orbslam3.Sensor.RGBD, False)
+                                    orbslam3.Sensor.MONOCULAR, False)
+        elif self.config["Orbslam"]["sensor_type"] == "rgbd":
+            self.orbslam = orbslam3.system(self.config["Orbslam"]["vocab_file"],
+                                        self.config["Orbslam"]["settings_file"],
+                                        orbslam3.Sensor.RGBD, False)
         
 
         self.gaussians.training_setup(opt_params)

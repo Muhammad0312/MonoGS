@@ -25,3 +25,15 @@ is it some shitty transformation
 Fixed the transformation, double check it
 The frames for orbslam and MonoGs donot correspond,
 Modify the dataset to get the color and depth paths with timestamps.
+
+
+
+TODO: Sync the cameras from frontend to backend
+
+
+It produces the best results so far when pose update is commented in the backend
+pose is updated in the frontend
+cam rot delta and cam trans delta are added to the optimizer
+1500 orb features gave the best result so far
+
+commenting out all pose updates from optimizer gives good results as well

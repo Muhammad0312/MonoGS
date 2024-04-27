@@ -1,4 +1,9 @@
 inherit_from: "configs/rgbd/replica/base_config.yaml"
 Dataset:
-  dataset_path: "datasets/replica/office1/"
+  dataset_path: "/root/Datasets/Replica/office1/"
   single_thread: False
+
+Orbslam:
+  vocab_file: "submodules/ORBSLAM3_PYTHON/extern/ORB_SLAM3/Vocabulary/ORBvoc.txt"
+  settings_file: "submodules/ORBSLAM3_PYTHON/extern/ORB_SLAM3/Examples/RGB-D/Replica.yaml"
+  sensor_type: 'rgbd'

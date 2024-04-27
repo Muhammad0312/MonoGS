@@ -17,5 +17,10 @@ Dataset:
     depth_scale: 5000.0
     distorted: True
 
+Orbslam:
+  vocab_file: "submodules/ORBSLAM3_PYTHON/extern/ORB_SLAM3/Vocabulary/ORBvoc.txt"
+  settings_file: "submodules/ORBSLAM3_PYTHON/extern/ORB_SLAM3/Examples/Monocular/TUM1.yaml"
+  sensor_type: "mono"
+
 
 

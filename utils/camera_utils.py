@@ -23,6 +23,7 @@ class Camera(nn.Module):
         image_width,
         color_path,
         depth_path,
+        timestamp,
         device="cuda:0",  
     ):
         super(Camera, self).__init__()
@@ -39,6 +40,7 @@ class Camera(nn.Module):
         self.depth = depth
         self.color_path = color_path
         self.depth_path = depth_path
+        self.timestamp = timestamp
         self.grad_mask = None
 
         self.fx = fx
@@ -68,7 +70,7 @@ class Camera(nn.Module):
 
     @staticmethod
     def init_from_dataset(dataset, idx, projection_matrix):
-        gt_color, gt_depth, gt_pose, color_path, depth_path = dataset[idx]
+        gt_color, gt_depth, gt_pose, color_path, depth_path, timestamp = dataset[idx]
         return Camera(
             idx,
             gt_color,
@@ -85,6 +87,7 @@ class Camera(nn.Module):
             dataset.width,
             color_path,
             depth_path,
+            timestamp,
             device=dataset.device,
         )
 
@@ -94,7 +97,7 @@ class Camera(nn.Module):
             znear=0.01, zfar=100.0, fx=fx, fy=fy, cx=cx, cy=cy, W=W, H=H
         ).transpose(0, 1)
         return Camera(
-            uid, None, None, T, projection_matrix, fx, fy, cx, cy, FoVx, FoVy, H, W, None, None
+            uid, None, None, T, projection_matrix, fx, fy, cx, cy, FoVx, FoVy, H, W, None, None, None
         )
 
     @property

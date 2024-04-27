@@ -20,4 +20,4 @@ Dataset:
 Orbslam:
   vocab_file: "submodules/ORBSLAM3_PYTHON/extern/ORB_SLAM3/Vocabulary/ORBvoc.txt"
   settings_file: "submodules/ORBSLAM3_PYTHON/extern/ORB_SLAM3/Examples/RGB-D/TUM1.yaml"
-  associations_file: "submodules/ORBSLAM3_PYTHON/extern/ORB_SLAM3/Examples/RGB-D/associations/fr1_desk.txt"
+  sensor_type: 'rgbd'

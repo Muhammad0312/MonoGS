@@ -14,6 +14,7 @@ from utils.multiprocessing_utils import clone_obj
 from utils.pose_utils import update_pose
 from utils.slam_utils import get_loss_tracking, get_median_depth
 import cv2
+import matplotlib.pyplot as plt
 
 
 class FrontEnd(mp.Process):
@@ -135,16 +136,28 @@ class FrontEnd(mp.Process):
         self.reset = False
 
     def tracking(self, cur_frame_idx, viewpoint):
-        img = cv2.imread(viewpoint.color_path, cv2.IMREAD_UNCHANGED)
-        imgD = cv2.imread(viewpoint.depth_path, cv2.IMREAD_UNCHANGED)
-        currentTimeStamp = self.dataset.timestamps[cur_frame_idx]
+        if self.config["Orbslam"]["sensor_type"] == "rgbd":
+            img = cv2.imread(viewpoint.color_path, cv2.IMREAD_UNCHANGED)
+            imgD = cv2.imread(viewpoint.depth_path, cv2.IMREAD_UNCHANGED)
+            currentTimeStamp = self.dataset.timestamps[cur_frame_idx]
 
-        if self.orbslamImageScale != 1.0:
-            width = img.cols * self.orbslamImageScale
-            height = img.rows * self.orbslamImageScale
-            img = cv2.resize(img, (width, height))
+            if self.orbslamImageScale != 1.0:
+                width = img.cols * self.orbslamImageScale
+                height = img.rows * self.orbslamImageScale
+                img = cv2.resize(img, (width, height))
 
-        success = self.orbslam.process_image_rgbd(img, imgD, currentTimeStamp)
+            success = self.orbslam.process_image_rgbd(img, imgD, currentTimeStamp)
+        elif self.config["Orbslam"]["sensor_type"] == "mono":
+            img = cv2.imread(viewpoint.color_path, cv2.IMREAD_UNCHANGED)
+            currentTimeStamp = self.dataset.timestamps[cur_frame_idx]
+
+            if self.orbslamImageScale != 1.0:
+                width = img.cols * self.orbslamImageScale
+                height = img.rows * self.orbslamImageScale
+                img = cv2.resize(img, (width, height))
+
+            success = self.orbslam.process_image_mono(img, currentTimeStamp)
+
         if self.orbslam.get_tracking_state() != 2:
             viewpoint.update_RT(viewpoint.R_gt, viewpoint.T_gt)
             return
@@ -176,6 +189,9 @@ class FrontEnd(mp.Process):
                 render_pkg["depth"],
                 render_pkg["opacity"],
             )
+        
+        # plt.imshow(image.permute(1, 2, 0).detach().cpu().numpy())
+        # plt.show()
         
         self.median_depth = get_median_depth(depth, opacity)
         return render_pkg
@@ -290,8 +306,8 @@ class FrontEnd(mp.Process):
         keyframes = data[3]
         self.occ_aware_visibility = occ_aware_visibility
 
-        for kf_id, kf_R, kf_T in keyframes:
-            self.cameras[kf_id].update_RT(kf_R.clone(), kf_T.clone())
+        # for kf_id, kf_R, kf_T in keyframes:
+        #     self.cameras[kf_id].update_RT(kf_R.clone(), kf_T.clone())
 
     def cleanup(self, cur_frame_idx):
         self.cameras[cur_frame_idx].clean()
@@ -399,6 +415,10 @@ class FrontEnd(mp.Process):
                     gui_utils.GaussianPacket(
                         gaussians=clone_obj(self.gaussians),
                         current_frame=viewpoint,
+                        gtcolor=viewpoint.original_image,
+                        gtdepth=viewpoint.depth
+                        if not self.monocular
+                        else np.zeros((viewpoint.image_height, viewpoint.image_width)),
                         keyframes=keyframes,
                         kf_window=current_window_dict,
                     )

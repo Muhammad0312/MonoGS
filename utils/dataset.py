@@ -7,6 +7,7 @@ import numpy as np
 import torch
 import trimesh
 from PIL import Image
+import time
 
 from gaussian_splatting.utils.graphics_utils import focal2fov
 
@@ -23,6 +24,7 @@ class ReplicaParser:
         self.depth_paths = sorted(glob.glob(f"{self.input_folder}/results/depth*.png"))
         self.n_img = len(self.color_paths)
         self.load_poses(f"{self.input_folder}/traj.txt")
+        self.generate_timestamps()
 
     def load_poses(self, path):
         self.poses = []
@@ -43,6 +45,14 @@ class ReplicaParser:
 
             frames.append(frame)
         self.frames = frames
+
+    '''Generate dummy timestamps for replica dataset since orbslam3 needs it'''
+    def generate_timestamps(self):
+        timestamps = []
+        initial_time = time.time()
+        for i in range(self.n_img):
+            timestamps.append(initial_time + (i * (1/30)))
+        self.timestamps = timestamps
 
 
 class TUMParser:
@@ -122,7 +132,6 @@ class TUMParser:
 
             self.frames.append(frame)
 
-
 class EuRoCParser:
     def __init__(self, input_folder, start_idx=0):
         self.input_folder = input_folder
@@ -152,6 +161,7 @@ class EuRoCParser:
 
     def load_poses(self, path):
         self.poses = []
+        self.timestamps = []
         with open(path) as f:
             reader = csv.reader(f)
             header = next(reader)
@@ -175,12 +185,14 @@ class EuRoCParser:
             quat = data[pose_indices[i], 4:8]
             quat = quat[[1, 2, 3, 0]]
             
-            
+            ts = data[pose_indices[i], 0]
+
             T_w_i = trimesh.transformations.quaternion_matrix(np.roll(quat, 1))
             T_w_i[:3, 3] = trans
             T_w_c = np.dot(T_w_i, T_i_c0)
 
             self.poses += [np.linalg.inv(T_w_c)]
+            self.timestamps += [ts]
 
             frame = {
                 "file_path": self.color_paths[i],
@@ -258,6 +270,7 @@ class MonocularDataset(BaseDataset):
     def __getitem__(self, idx):
         color_path = self.color_paths[idx]
         pose = self.poses[idx]
+        timestamp = self.timestamps[idx]
 
         image = np.array(Image.open(color_path))
         depth = None
@@ -277,7 +290,7 @@ class MonocularDataset(BaseDataset):
             .to(device=self.device, dtype=self.dtype)
         )
         pose = torch.from_numpy(pose).to(device=self.device)
-        return image, depth, pose, color_path, depth_path
+        return image, depth, pose, color_path, depth_path, timestamp
 
 
 class StereoDataset(BaseDataset):
@@ -369,6 +382,7 @@ class StereoDataset(BaseDataset):
         color_path_r = self.color_paths_r[idx]
 
         pose = self.poses[idx]
+        timestamp = self.timestamps[idx]
         image = cv2.imread(color_path, 0)
         image_r = cv2.imread(color_path_r, 0)
         depth = None
@@ -392,7 +406,7 @@ class StereoDataset(BaseDataset):
         )
         pose = torch.from_numpy(pose).to(device=self.device)
 
-        return image, depth, pose
+        return image, depth, pose, color_path, color_path_r, timestamp
 
 
 class TUMDataset(MonocularDataset):
@@ -416,6 +430,7 @@ class ReplicaDataset(MonocularDataset):
         self.color_paths = parser.color_paths
         self.depth_paths = parser.depth_paths
         self.poses = parser.poses
+        self.timestamps = parser.timestamps
 
 
 class EurocDataset(StereoDataset):
@@ -427,6 +442,7 @@ class EurocDataset(StereoDataset):
         self.color_paths = parser.color_paths
         self.color_paths_r = parser.color_paths_r
         self.poses = parser.poses
+        self.timestamps = parser.timestamps
 
 
 class RealsenseDataset(BaseDataset):

@@ -435,25 +435,25 @@ class BackEnd(mp.Process):
                         if self.current_window[cam_idx] == 0:
                             continue
                         viewpoint = self.viewpoints[current_window[cam_idx]]
-                        if cam_idx < frames_to_optimize:
-                            opt_params.append(
-                                {
-                                    "params": [viewpoint.cam_rot_delta],
-                                    "lr": self.config["Training"]["lr"]["cam_rot_delta"]
-                                    * 0.5,
-                                    "name": "rot_{}".format(viewpoint.uid),
-                                }
-                            )
-                            opt_params.append(
-                                {
-                                    "params": [viewpoint.cam_trans_delta],
-                                    "lr": self.config["Training"]["lr"][
-                                        "cam_trans_delta"
-                                    ]
-                                    * 0.5,
-                                    "name": "trans_{}".format(viewpoint.uid),
-                                }
-                            )
+                        # if cam_idx < frames_to_optimize:
+                        #     opt_params.append(
+                        #         {
+                        #             "params": [viewpoint.cam_rot_delta],
+                        #             "lr": self.config["Training"]["lr"]["cam_rot_delta"]
+                        #             * 0.5,
+                        #             "name": "rot_{}".format(viewpoint.uid),
+                        #         }
+                        #     )
+                        #     opt_params.append(
+                        #         {
+                        #             "params": [viewpoint.cam_trans_delta],
+                        #             "lr": self.config["Training"]["lr"][
+                        #                 "cam_trans_delta"
+                        #             ]
+                        #             * 0.5,
+                        #             "name": "trans_{}".format(viewpoint.uid),
+                        #         }
+                        #     )
                         opt_params.append(
                             {
                                 "params": [viewpoint.exposure_a],
