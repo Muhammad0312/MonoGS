@@ -15,6 +15,7 @@ from utils.pose_utils import update_pose
 from utils.slam_utils import get_loss_tracking, get_median_depth
 import cv2
 import matplotlib.pyplot as plt
+from scipy.spatial.transform import Rotation as R
 
 
 class FrontEnd(mp.Process):
@@ -54,6 +55,7 @@ class FrontEnd(mp.Process):
         self.pause = False
 
         self.translation_error = []
+        self.quaternion_error = []
 
     def set_hyperparams(self):
         self.save_dir = self.config["Results"]["save_dir"]
@@ -194,6 +196,9 @@ class FrontEnd(mp.Process):
             viewpoint.update_RT(prev.R, prev.T)
 
         self.translation_error.append(torch.norm(viewpoint.T - viewpoint.T_gt).detach().cpu().numpy())
+        quat_est = R.from_matrix(viewpoint.R.detach().cpu().numpy()).as_quat()
+        quat_gt = R.from_matrix(viewpoint.R_gt.detach().cpu().numpy()).as_quat()
+        self.quaternion_error.append(np.linalg.norm(quat_est - quat_gt))
 
         render_pkg = render(
                     viewpoint, self.gaussians, self.pipeline_params, self.background
@@ -364,8 +369,10 @@ class FrontEnd(mp.Process):
                 # if cur_frame_idx > 20:
                 #     fig = plt.figure()
                 #     ax = fig.add_subplot(111)
-                #     ax.set_title("Translation Error")
-                #     ax.plot(self.translation_error[:5])
+                #     ax.set_title("OrbSlam Error")
+                #     ax.plot(self.translation_error[:5], color="blue", label="Translation")
+                #     ax.plot(self.quaternion_error[:5], color="red", label="Quaternion")
+                #     ax.legend()
                 #     ax.set_ylim([0, 0.1])
                 #     # ax.set_xlim([0, len(self.translation_error)])
                 #     fig.show()

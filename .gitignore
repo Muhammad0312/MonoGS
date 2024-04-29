@@ -18,3 +18,5 @@ result*
 submodules/simple-knn/
 
 delete_this/
+
+*.png
