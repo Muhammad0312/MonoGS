@@ -180,6 +180,9 @@ class FrontEnd(mp.Process):
             current_pose = torch.from_numpy(trajectory[-1])
             current_pose = torch.inverse(current_pose) @ T
             viewpoint.update_RT(current_pose[:3, :3], current_pose[:3, 3])
+            print("Number of poses: ", len(trajectory))
+            print("Number of cameras: ", len(self.cameras))
+            print("------------")
             
             # for (traj, cam) in zip(trajectory, list(self.cameras.values())[1:]):
             #     current_pose = torch.from_numpy(traj)
