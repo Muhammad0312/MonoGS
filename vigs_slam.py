@@ -62,6 +62,10 @@ class SLAM:
             self.orbslam = orbslam3.system(self.config["Orbslam"]["vocab_file"],
                                     self.config["Orbslam"]["settings_file"],
                                     orbslam3.Sensor.MONOCULAR, False)
+        elif self.config["Orbslam"]["sensor_type"] == "mono_inertial":
+            self.orbslam = orbslam3.system(self.config["Orbslam"]["vocab_file"],
+                                    self.config["Orbslam"]["settings_file"],
+                                    orbslam3.Sensor.IMU_MONOCULAR, False)
         elif self.config["Orbslam"]["sensor_type"] == "rgbd":
             self.orbslam = orbslam3.system(self.config["Orbslam"]["vocab_file"],
                                         self.config["Orbslam"]["settings_file"],

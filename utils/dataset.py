@@ -8,6 +8,7 @@ import torch
 import trimesh
 from PIL import Image
 import time
+import orbslam3
 
 from gaussian_splatting.utils.graphics_utils import focal2fov
 
@@ -149,6 +150,9 @@ class EuRoCParser:
         self.load_poses(
             f"{self.input_folder}/mav0/state_groundtruth_estimate0/data.csv"
         )
+        self.load_imu(
+            f"{self.input_folder}/mav0/imu0/data.csv"
+        )
 
     def associate(self, ts_pose):
         pose_indices = []
@@ -201,6 +205,160 @@ class EuRoCParser:
 
             frames.append(frame)
         self.frames = frames
+
+    def load_imu(self, path):
+        # Load IMU data
+        self.imuTimeStamps = []
+        self.accData = []
+        self.gyroData = []
+        self.imu = []
+        with open(path, 'r') as f:
+            for line in f:
+                data = line.split(',')
+                if data[0] == '#timestamp [ns]':
+                    continue
+                self.imuTimeStamps.append(int(data[0])*1e-9)
+                self.accData.append(orbslam3.Point3f(float(data[4]), float(data[5]), float(data[6])))
+                self.gyroData.append(orbslam3.Point3f(float(data[1]), float(data[2]), float(data[3])))
+
+
+        self.associate_imu()
+
+    def associate_imu(self):
+        # Load IMU data
+        firstImu = 0
+        first_color_ts = float((self.color_paths[0].split("/")[-1]).split(".")[0])
+        while self.imuTimeStamps[firstImu] <= first_color_ts*1e-9:
+            firstImu += 1
+        firstImu -= 1
+
+        for i in range(self.n_img):
+            if i == 0:
+                self.imu.append([])
+                continue
+
+            readingsBeforeCurrentFrame = []
+            color_ts = float((self.color_paths[i].split("/")[-1]).split(".")[0])
+            while self.imuTimeStamps[firstImu] <= color_ts*1e-9:
+                readingsBeforeCurrentFrame.append(
+                    orbslam3.Point(self.accData[firstImu].x, self.accData[firstImu].y, self.accData[firstImu].z, self.gyroData[firstImu].x, self.gyroData[firstImu].y, self.gyroData[firstImu].z, self.imuTimeStamps[firstImu])
+                )
+                firstImu += 1
+            self.imu.append(readingsBeforeCurrentFrame)
+
+
+class EuRoCParserMono:
+    def __init__(self, input_folder, start_idx=0):
+        self.input_folder = input_folder
+        self.start_idx = start_idx
+        self.color_paths = sorted(
+            glob.glob(f"{self.input_folder}/mav0/cam0/data/*.png")
+        )
+        self.color_paths_r = sorted(
+            glob.glob(f"{self.input_folder}/mav0/cam1/data/*.png")
+        )
+        assert len(self.color_paths) == len(self.color_paths_r)
+        self.color_paths = self.color_paths[start_idx:]
+        self.color_paths_r = self.color_paths_r[start_idx:]
+        self.n_img = len(self.color_paths)
+        self.load_poses(
+            f"{self.input_folder}/mav0/state_groundtruth_estimate0/data.csv"
+        )
+        self.load_imu(
+            f"{self.input_folder}/mav0/imu0/data.csv"
+        )
+
+    def associate(self, ts_pose):
+        pose_indices = []
+        for i in range(self.n_img):
+            color_ts = float((self.color_paths[i].split("/")[-1]).split(".")[0])
+            k = np.argmin(np.abs(ts_pose - color_ts))
+            pose_indices.append(k)
+
+        return pose_indices
+
+    def load_poses(self, path):
+        self.poses = []
+        self.timestamps = []
+        with open(path) as f:
+            reader = csv.reader(f)
+            header = next(reader)
+            data = [list(map(float, row)) for row in reader]
+        data = np.array(data)
+        T_i_c0 = np.array(
+            [
+                [0.0148655429818, -0.999880929698, 0.00414029679422, -0.0216401454975],
+                [0.999557249008, 0.0149672133247, 0.025715529948, -0.064676986768],
+                [-0.0257744366974, 0.00375618835797, 0.999660727178, 0.00981073058949],
+                [0.0, 0.0, 0.0, 1.0],
+            ]
+        )
+
+        pose_ts = data[:, 0]
+        pose_indices = self.associate(pose_ts)
+
+        frames = []
+        for i in range(self.n_img):
+            trans = data[pose_indices[i], 1:4]
+            quat = data[pose_indices[i], 4:8]
+            quat = quat[[1, 2, 3, 0]]
+            
+            ts = data[pose_indices[i], 0]
+
+            T_w_i = trimesh.transformations.quaternion_matrix(np.roll(quat, 1))
+            T_w_i[:3, 3] = trans
+            T_w_c = np.dot(T_w_i, T_i_c0)
+
+            self.poses += [np.linalg.inv(T_w_c)]
+            self.timestamps += [ts*1e-9]
+
+            frame = {
+                "file_path": self.color_paths[i],
+                "transform_matrix": (np.linalg.inv(T_w_c)).tolist(),
+            }
+
+            frames.append(frame)
+        self.frames = frames
+    
+    def load_imu(self, path):
+        # Load IMU data
+        self.imuTimeStamps = []
+        self.accData = []
+        self.gyroData = []
+        self.imu = []
+        with open(path, 'r') as f:
+            for line in f:
+                data = line.split(',')
+                if data[0] == '#timestamp [ns]':
+                    continue
+                self.imuTimeStamps.append(int(data[0])*1e-9)
+                self.accData.append(orbslam3.Point3f(float(data[4]), float(data[5]), float(data[6])))
+                self.gyroData.append(orbslam3.Point3f(float(data[1]), float(data[2]), float(data[3])))
+
+
+        self.associate_imu()
+
+    def associate_imu(self):
+        # Load IMU data
+        firstImu = 0
+        first_color_ts = float((self.color_paths[0].split("/")[-1]).split(".")[0])
+        while self.imuTimeStamps[firstImu] <= first_color_ts*1e-9:
+            firstImu += 1
+        firstImu -= 1
+
+        for i in range(self.n_img):
+            if i == 0:
+                self.imu.append([])
+                continue
+
+            readingsBeforeCurrentFrame = []
+            color_ts = float((self.color_paths[i].split("/")[-1]).split(".")[0])
+            while self.imuTimeStamps[firstImu] <= color_ts*1e-9:
+                readingsBeforeCurrentFrame.append(
+                    orbslam3.Point(self.accData[firstImu].x, self.accData[firstImu].y, self.accData[firstImu].z, self.gyroData[firstImu].x, self.gyroData[firstImu].y, self.gyroData[firstImu].z, self.imuTimeStamps[firstImu])
+                )
+                firstImu += 1
+            self.imu.append(readingsBeforeCurrentFrame)
 
 
 class BaseDataset(torch.utils.data.Dataset):
@@ -290,6 +448,7 @@ class MonocularDataset(BaseDataset):
             .to(device=self.device, dtype=self.dtype)
         )
         pose = torch.from_numpy(pose).to(device=self.device)
+        
         return image, depth, pose, color_path, depth_path, timestamp
 
 
@@ -432,6 +591,17 @@ class ReplicaDataset(MonocularDataset):
         self.poses = parser.poses
         self.timestamps = parser.timestamps
 
+# class EurocDatasetMono(StereoDataset):
+#     def __init__(self, args, path, config):
+#         super().__init__(args, path, config)
+#         dataset_path = config["Dataset"]["dataset_path"]
+#         parser = EuRoCParserMono(dataset_path, start_idx=config["Dataset"]["start_idx"])
+#         self.num_imgs = parser.n_img
+#         self.color_paths = parser.color_paths
+#         self.color_paths_r = parser.color_paths_r
+#         self.poses = parser.poses
+#         self.timestamps = parser.timestamps
+#         self.imu = parser.imu
 
 class EurocDataset(StereoDataset):
     def __init__(self, args, path, config):
@@ -443,6 +613,7 @@ class EurocDataset(StereoDataset):
         self.color_paths_r = parser.color_paths_r
         self.poses = parser.poses
         self.timestamps = parser.timestamps
+        self.imu = parser.imu
 
 
 class RealsenseDataset(BaseDataset):
@@ -511,6 +682,8 @@ def load_dataset(args, path, config):
         return TUMDataset(args, path, config)
     elif config["Dataset"]["type"] == "replica":
         return ReplicaDataset(args, path, config)
+    # elif config["Dataset"]["type"] == "euroc_mono":
+    #     return EurocDatasetMono(args, path, config)
     elif config["Dataset"]["type"] == "euroc":
         return EurocDataset(args, path, config)
     elif config["Dataset"]["type"] == "realsense":

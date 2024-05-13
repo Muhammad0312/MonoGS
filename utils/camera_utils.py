@@ -53,10 +53,10 @@ class Camera(nn.Module):
         self.image_width = image_width
 
         self.cam_rot_delta = nn.Parameter(
-            torch.zeros(3, requires_grad=False, device=device)
+            torch.zeros(3, requires_grad=True, device=device)
         )
         self.cam_trans_delta = nn.Parameter(
-            torch.zeros(3, requires_grad=False, device=device)
+            torch.zeros(3, requires_grad=True, device=device)
         )
 
         self.exposure_a = nn.Parameter(

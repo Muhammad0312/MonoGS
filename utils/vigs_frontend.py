@@ -161,6 +161,17 @@ class FrontEnd(mp.Process):
                 img = cv2.resize(img, (width, height))
 
             success = self.orbslam.process_image_mono(img, currentTimeStamp)
+        elif self.config["Orbslam"]["sensor_type"] == "mono_inertial":
+            img = cv2.imread(viewpoint.color_path, cv2.IMREAD_UNCHANGED)
+            currentTimeStamp = float(self.dataset.timestamps[cur_frame_idx] * 1e-9)
+            imu_data = self.dataset.imu[cur_frame_idx]
+
+            if self.orbslamImageScale != 1.0:
+                width = img.cols * self.orbslamImageScale
+                height = img.rows * self.orbslamImageScale
+                img = cv2.resize(img, (width, height))
+
+            success = self.orbslam.process_image_mono(img, currentTimeStamp, imu_data)
 
         if self.orbslam.get_tracking_state() != 2:
             # viewpoint.update_RT(viewpoint.R_gt, viewpoint.T_gt)
@@ -180,9 +191,9 @@ class FrontEnd(mp.Process):
             current_pose = torch.from_numpy(trajectory[-1])
             current_pose = torch.inverse(current_pose) @ T
             viewpoint.update_RT(current_pose[:3, :3], current_pose[:3, 3])
-            print("Number of poses: ", len(trajectory))
-            print("Number of cameras: ", len(self.cameras))
-            print("------------")
+            # print("Number of poses: ", len(trajectory))
+            # print("Number of cameras: ", len(self.cameras))
+            # print("------------")
             
             # for (traj, cam) in zip(trajectory, list(self.cameras.values())[1:]):
             #     current_pose = torch.from_numpy(traj)

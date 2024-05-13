@@ -183,7 +183,7 @@ class FrontEnd(mp.Process):
 
             with torch.no_grad():
                 pose_optimizer.step()
-                converged = update_pose(viewpoint,converged_threshold=1e-8)
+                converged = update_pose(viewpoint) #,converged_threshold=1e-8
 
             if tracking_itr % 10 == 0:
                 self.q_main2vis.put(
@@ -354,18 +354,18 @@ class FrontEnd(mp.Process):
 
             if self.frontend_queue.empty():
                 tic.record()
-                if cur_frame_idx >= len(self.dataset):
-                    fig = plt.figure()
-                    ax = fig.add_subplot(111)
-                    ax.set_title("MonoGS Errors")
-                    ax.plot(self.translation_error[:5], color="blue", label="Translation")
-                    ax.plot(self.quaternion_error[:5], color="red", label="Quaternion")
-                    ax.legend()
-                    ax.set_ylim([0, 0.1])
-                    # ax.set_xlim([0, len(self.translation_error)])
-                    fig.show()
-                    fig.waitforbuttonpress()
-                    break
+                # if cur_frame_idx >= 10:
+                #     fig = plt.figure()
+                #     ax = fig.add_subplot(111)
+                #     ax.set_title("MonoGS Errors")
+                #     ax.plot(self.translation_error[:5], color="blue", label="Translation")
+                #     ax.plot(self.quaternion_error[:5], color="red", label="Quaternion")
+                #     ax.legend()
+                #     ax.set_ylim([0, 0.1])
+                #     # ax.set_xlim([0, len(self.translation_error)])
+                #     fig.show()
+                #     fig.waitforbuttonpress()
+                #     break
 
                 if cur_frame_idx >= len(self.dataset):   
                     if self.save_results:
