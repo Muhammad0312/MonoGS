@@ -198,10 +198,10 @@ class FrontEnd(mp.Process):
             if converged:
                 break
 
-        self.translation_error.append(torch.norm(viewpoint.T - viewpoint.T_gt).detach().cpu().numpy())
-        quat_est = R.from_matrix(viewpoint.R.detach().cpu().numpy()).as_quat()
-        quat_gt = R.from_matrix(viewpoint.R_gt.detach().cpu().numpy()).as_quat()
-        self.quaternion_error.append(np.linalg.norm(quat_est - quat_gt))
+        # self.translation_error.append(torch.norm(viewpoint.T - viewpoint.T_gt).detach().cpu().numpy())
+        # quat_est = R.from_matrix(viewpoint.R.detach().cpu().numpy()).as_quat()
+        # quat_gt = R.from_matrix(viewpoint.R_gt.detach().cpu().numpy()).as_quat()
+        # self.quaternion_error.append(np.linalg.norm(quat_est - quat_gt))
         self.median_depth = get_median_depth(depth, opacity)
         return render_pkg
 

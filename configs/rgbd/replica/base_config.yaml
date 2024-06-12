@@ -9,7 +9,7 @@ Results:
 
 Dataset:
   sensor_type: 'depth'
-  pcd_downsample: 64
+  pcd_downsample: 256
   pcd_downsample_init: 32
   adaptive_pointsize: True
   point_size: 0.05
@@ -45,7 +45,7 @@ Training:
   gaussian_reset: 2001
   size_threshold: 20
   kf_interval: 4
-  window_size: 10
+  window_size: 4
   pose_window: 5
   edge_threshold: 4
   rgb_boundary_threshold: 0.01

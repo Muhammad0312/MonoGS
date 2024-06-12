@@ -117,6 +117,21 @@ class FrontEnd(mp.Process):
                 initial_depth[~valid_rgb] = 0  # Ignore the invalid rgb pixels
             return initial_depth.cpu().numpy()[0]
         # use the observed depth
+        # plot the error in gt depth and observed depth
+        if not init:
+            depth_error = np.abs(viewpoint.depth - depth.detach().cpu().numpy())
+            depth_mask = (depth_error > 0.05)[None]
+            initial_depth = torch.from_numpy(viewpoint.depth).unsqueeze(0)
+            initial_depth[~valid_rgb.cpu()] = 0  # Ignore the invalid rgb pixels
+            initial_depth[~depth_mask] = 0
+            return initial_depth[0].numpy()
+            # plt.grid(False)
+            # plt.imshow(np.transpose(depth_mask, (1, 2, 0)))
+            # fig, ax = plt.subplots(1, 3)
+            # ax[0].imshow(np.transpose(depth_error, (1, 2, 0)))
+            # ax[1].imshow(viewpoint.depth)
+            # ax[2].imshow(np.transpose(depth.detach().cpu().numpy(), (1, 2, 0)))
+
         initial_depth = torch.from_numpy(viewpoint.depth).unsqueeze(0)
         initial_depth[~valid_rgb.cpu()] = 0  # Ignore the invalid rgb pixels
         return initial_depth[0].numpy()
@@ -209,10 +224,10 @@ class FrontEnd(mp.Process):
             prev = self.cameras[cur_frame_idx - self.use_every_n_frames]
             viewpoint.update_RT(prev.R, prev.T)
 
-        self.translation_error.append(torch.norm(viewpoint.T - viewpoint.T_gt).detach().cpu().numpy())
-        quat_est = R.from_matrix(viewpoint.R.detach().cpu().numpy()).as_quat()
-        quat_gt = R.from_matrix(viewpoint.R_gt.detach().cpu().numpy()).as_quat()
-        self.quaternion_error.append(np.linalg.norm(quat_est - quat_gt))
+        # self.translation_error.append(torch.norm(viewpoint.T - viewpoint.T_gt).detach().cpu().numpy())
+        # quat_est = R.from_matrix(viewpoint.R.detach().cpu().numpy()).as_quat()
+        # quat_gt = R.from_matrix(viewpoint.R_gt.detach().cpu().numpy()).as_quat()
+        # self.quaternion_error.append(np.linalg.norm(quat_est - quat_gt))
 
         render_pkg = render(
                     viewpoint, self.gaussians, self.pipeline_params, self.background
@@ -224,8 +239,13 @@ class FrontEnd(mp.Process):
                 render_pkg["opacity"],
             )
         
+        # plt.grid(False)
         # plt.imshow(image.permute(1, 2, 0).detach().cpu().numpy())
-        # plt.show()
+        # Normalize image to 0-1
+        # image = image - image.min()
+        # image = image / image.max()
+
+        # plt.imsave(f"/root/Datasets/renderedimgs/monotumseq3/image_{cur_frame_idx}.png", image.permute(1, 2, 0).detach().cpu().numpy())
         
         self.median_depth = get_median_depth(depth, opacity)
         return render_pkg
@@ -317,6 +337,14 @@ class FrontEnd(mp.Process):
             idx = np.argmax(inv_dist)
             removed_frame = window[N_dont_touch + idx]
             window.remove(removed_frame)
+
+        return window, removed_frame
+    
+    def add_to_window2(
+        self, cur_frame_idx, cur_frame_visibility_filter, occ_aware_visibility, window
+    ):
+        window = [cur_frame_idx] + window[ :self.window_size]
+        removed_frame = None
 
         return window, removed_frame
 
@@ -420,10 +448,12 @@ class FrontEnd(mp.Process):
                     time.sleep(0.01)
                     continue
 
+                # time.sleep(0.5)
+
                 viewpoint = Camera.init_from_dataset(
                     self.dataset, cur_frame_idx, projection_matrix
                 )
-                viewpoint.compute_grad_mask(self.config)
+                # viewpoint.compute_grad_mask(self.config)
 
                 # '''TODO: Add only those frames which were tracked successfully by ORBSLAM'''
                 # self.cameras[cur_frame_idx] = viewpoint
@@ -479,28 +509,30 @@ class FrontEnd(mp.Process):
                 last_keyframe_idx = self.current_window[0]
                 check_time = (cur_frame_idx - last_keyframe_idx) >= self.kf_interval
                 curr_visibility = (render_pkg["n_touched"] > 0).long()
-                create_kf = self.is_keyframe(
-                    cur_frame_idx,
-                    last_keyframe_idx,
-                    curr_visibility,
-                    self.occ_aware_visibility,
-                )
-                if len(self.current_window) < self.window_size:
-                    union = torch.logical_or(
-                        curr_visibility, self.occ_aware_visibility[last_keyframe_idx]
-                    ).count_nonzero()
-                    intersection = torch.logical_and(
-                        curr_visibility, self.occ_aware_visibility[last_keyframe_idx]
-                    ).count_nonzero()
-                    point_ratio = intersection / union
-                    create_kf = (
-                        check_time
-                        and point_ratio < self.config["Training"]["kf_overlap"]
-                    )
+                # create_kf = self.is_keyframe(
+                #     cur_frame_idx,
+                #     last_keyframe_idx,
+                #     curr_visibility,
+                #     self.occ_aware_visibility,
+                # )
+
+                create_kf = self.orbslam.is_keyframe()
+                # if len(self.current_window) < self.window_size:
+                #     union = torch.logical_or(
+                #         curr_visibility, self.occ_aware_visibility[last_keyframe_idx]
+                #     ).count_nonzero()
+                #     intersection = torch.logical_and(
+                #         curr_visibility, self.occ_aware_visibility[last_keyframe_idx]
+                #     ).count_nonzero()
+                #     point_ratio = intersection / union
+                #     create_kf = (
+                #         check_time
+                #         and point_ratio < self.config["Training"]["kf_overlap"]
+                #     )
                 if self.single_thread:
                     create_kf = check_time and create_kf
                 if create_kf:
-                    self.current_window, removed = self.add_to_window(
+                    self.current_window, removed = self.add_to_window2(
                         cur_frame_idx,
                         curr_visibility,
                         self.occ_aware_visibility,

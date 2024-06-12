@@ -148,8 +148,9 @@ class BackEnd(mp.Process):
         frames_to_optimize = self.config["Training"]["pose_window"]
 
         current_window_set = set(current_window)
+        min_index = min(current_window_set)
         for cam_idx, viewpoint in self.viewpoints.items():
-            if cam_idx in current_window_set:
+            if cam_idx >= min_index:
                 continue
             random_viewpoint_stack.append(viewpoint)
 
@@ -197,7 +198,7 @@ class BackEnd(mp.Process):
                 radii_acm.append(radii)
                 n_touched_acm.append(n_touched)
 
-            for cam_idx in torch.randperm(len(random_viewpoint_stack))[:2]:
+            for cam_idx in torch.randperm(len(random_viewpoint_stack))[:4]:
                 viewpoint = random_viewpoint_stack[cam_idx]
                 render_pkg = render(
                     viewpoint, self.gaussians, self.pipeline_params, self.background
@@ -378,6 +379,7 @@ class BackEnd(mp.Process):
                     time.sleep(0.01)
                     continue
                 self.map(self.current_window)
+                print("Total Iterations: ", self.iteration_count)
                 if self.last_sent >= 10:
                     self.map(self.current_window, prune=True, iters=10)
                     self.push_to_frontend()
@@ -473,6 +475,7 @@ class BackEnd(mp.Process):
                     self.map(self.current_window, iters=iter_per_kf)
                     self.map(self.current_window, prune=True)
                     self.push_to_frontend("keyframe")
+                    # print("Total Iterations: ", self.iteration_count)
                 else:
                     raise Exception("Unprocessed data", data)
         while not self.backend_queue.empty():

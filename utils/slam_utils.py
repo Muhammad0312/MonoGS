@@ -1,4 +1,5 @@
 import torch
+from gaussian_splatting.utils.loss_utils import l1_loss, ssim
 
 
 def image_gradient(image):
@@ -106,8 +107,9 @@ def get_loss_mapping_rgb(config, image, depth, viewpoint):
 
     rgb_pixel_mask = (gt_image.sum(dim=0) > rgb_boundary_threshold).view(*mask_shape)
     l1_rgb = torch.abs(image * rgb_pixel_mask - gt_image * rgb_pixel_mask)
-
-    return l1_rgb.mean()
+    ssim_loss = (1 - ssim(image, gt_image))
+    
+    return 0.8 * l1_rgb.mean() + 0.2 * ssim_loss
 
 
 def get_loss_mapping_rgbd(config, image, depth, viewpoint, initialization=False):

@@ -133,6 +133,9 @@ def eval_rendering(
     for idx in range(0, end_idx, interval):
         if idx in kf_indices:
             continue
+        if idx not in list(frames.keys()):
+            print(f"Frame {idx} not found in frames")
+            continue
         saved_frame_idx.append(idx)
         frame = frames[idx]
         gt_image, _, _, _, _, _ = dataset[idx]

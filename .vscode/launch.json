@@ -10,7 +10,7 @@
             "request": "launch",
             "program": "/root/Dev/MonoGS/slam.py",
             "console": "integratedTerminal",
-            "args": "--config configs/mono/euroc/mh02.yaml"
+            "args": "--config configs/mono/tum/fr1_desk.yaml"
         },
         {
             "name": "MonoGS RGBD",
@@ -18,7 +18,7 @@
             "request": "launch",
             "program": "/root/Dev/MonoGS/slam.py",
             "console": "integratedTerminal",
-            "args": "--config configs/rgbd/tum/fr1_desk.yaml"
+            "args": "--config configs/rgbd/tum/fr2_xyz.yaml --eval"
         },
         {
             "name": "MonoGS Stereo",
@@ -50,7 +50,7 @@
             "request": "launch",
             "program": "/root/Dev/MonoGS/vigs_slam.py",
             "console": "integratedTerminal",
-            "args": "--config configs/rgbd/tum/fr1_desk.yaml"
+            "args": "--config configs/rgbd/tum/fr3_office.yaml --eval"
         },
         {
             "name": "VIGS Mono 2",

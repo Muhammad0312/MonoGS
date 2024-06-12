@@ -1,6 +1,6 @@
 Results:
   save_results: True
-  save_dir: "delete_this"
+  save_dir: "monoresults"
   save_trj: True
   save_trj_kf_intv: 10
   use_gui: True
@@ -10,7 +10,7 @@ Results:
 Dataset:
   type: 'tum'
   sensor_type: 'monocular'
-  pcd_downsample: 64
+  pcd_downsample: 128
   pcd_downsample_init: 32
   adaptive_pointsize: True
   point_size: 0.01
@@ -30,7 +30,7 @@ Training:
   gaussian_reset: 2001
   size_threshold: 20
   kf_interval: 5
-  window_size: 8
+  window_size: 4
   pose_window: 3
   edge_threshold: 1.1
   rgb_boundary_threshold: 0.01
